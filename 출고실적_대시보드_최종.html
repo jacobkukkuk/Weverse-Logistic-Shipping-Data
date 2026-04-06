@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>출고실적 KPI 대시보드 · Weverse OMS</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg:#0f172a; --card:#1e293b; --accent:#f59e0b; --blue:#38bdf8;
+  --green:#22d3a0; --danger:#f87171; --purple:#a78bfa; --pink:#f472b6;
+  --text:#f1f5f9; --muted:#94a3b8; --border:rgba(255,255,255,0.07); --r:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI','Noto Sans KR',sans-serif;min-height:100vh;}
+
+header{background:#1e293b;border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.logo{display:flex;align-items:center;gap:12px;}
+.logo-icon{width:36px;height:36px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;}
+.logo h1{font-size:16px;font-weight:700;}
+.logo span{font-size:11px;color:var(--muted);display:block;}
+.hdr-right{display:flex;align-items:center;gap:10px;}
+#periodBadge{font-size:12px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:var(--accent);padding:5px 14px;border-radius:20px;}
+.btn{font-size:12px;border-radius:6px;padding:6px 14px;cursor:pointer;border:none;font-family:inherit;}
+.btn-up{background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.3);color:var(--blue);}
+.btn-up:hover{background:rgba(56,189,248,0.22);}
+#fileInput{display:none;}
+
+#uploadZone{margin:24px 28px;border:2px dashed rgba(245,158,11,0.35);border-radius:var(--r);padding:40px;text-align:center;cursor:pointer;background:rgba(245,158,11,0.02);transition:all 0.2s;}
+#uploadZone:hover,#uploadZone.drag{border-color:var(--accent);background:rgba(245,158,11,0.06);}
+#uploadZone h2{font-size:17px;font-weight:600;margin:10px 0 6px;}
+#uploadZone p{font-size:13px;color:var(--muted);}
+.hints{margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+.hint{font-size:11px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:20px;padding:3px 12px;color:var(--muted);}
+
+main{padding:0 28px 40px;max-width:1440px;margin:0 auto;}
+#dashMain{display:none;}
+.sec{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;padding:24px 0 10px;border-bottom:1px solid var(--border);margin-bottom:14px;}
+
+/* KPI */
+.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px;}
+.kpi-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;}
+@media(max-width:1100px){.kpi-grid,.kpi-grid4{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:700px){.kpi-grid,.kpi-grid4{grid-template-columns:repeat(2,1fr);}}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;position:relative;overflow:hidden;}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+.kpi.amber::before{background:var(--accent);}
+.kpi.blue::before{background:var(--blue);}
+.kpi.green::before{background:var(--green);}
+.kpi.red::before{background:var(--danger);}
+.kpi.purple::before{background:var(--purple);}
+.kpi.pink::before{background:var(--pink);}
+.kpi-label{font-size:11px;color:var(--muted);margin-bottom:8px;}
+.kpi-val{font-size:26px;font-weight:800;letter-spacing:-1px;}
+.kpi-val.amber{color:var(--accent);}
+.kpi-val.blue{color:var(--blue);}
+.kpi-val.green{color:var(--green);}
+.kpi-val.red{color:var(--danger);}
+.kpi-val.purple{color:var(--purple);}
+.kpi-val.pink{color:var(--pink);}
+.kpi-sub{font-size:11px;color:var(--muted);margin-top:6px;}
+
+/* Charts */
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;}
+.row4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px;}
+@media(max-width:900px){.row2,.row3,.row4{grid-template-columns:1fr;}}
+.ccard{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:20px;}
+.ccard-title{font-size:13px;font-weight:600;margin-bottom:3px;}
+.ccard-sub{font-size:11px;color:var(--muted);margin-bottom:16px;}
+
+/* LT 카드 (국가별 배송LT) */
+.lt-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:20px;}
+.lt-flag{font-size:22px;margin-bottom:8px;}
+.lt-country{font-size:12px;color:var(--muted);margin-bottom:4px;}
+.lt-val{font-size:28px;font-weight:800;}
+.lt-sub{font-size:11px;color:var(--muted);margin-top:4px;}
+.lt-note{font-size:10px;color:rgba(148,163,184,0.6);margin-top:4px;}
+
+/* 안내박스 */
+.info-box{background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.2);border-radius:var(--r);padding:12px 18px;margin-bottom:14px;font-size:12px;color:var(--blue);}
+.warn-box{background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:var(--r);padding:10px 18px;margin-bottom:10px;font-size:11px;color:var(--accent);}
+
+/* 국가 테이블 */
+.ctable-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:14px;overflow-x:auto;}
+.ctable{width:100%;border-collapse:collapse;font-size:13px;}
+.ctable th{text-align:left;padding:8px 14px;color:var(--muted);font-size:11px;font-weight:500;border-bottom:1px solid var(--border);white-space:nowrap;}
+.ctable td{padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.04);white-space:nowrap;}
+.ctable tr:last-child td{border-bottom:none;}
+.ctable tr:hover td{background:rgba(255,255,255,0.025);}
+.bar-bg{background:rgba(255,255,255,0.07);border-radius:4px;height:6px;min-width:80px;}
+.bar-fill{height:6px;border-radius:4px;background:var(--blue);}
+
+/* 상세 테이블 */
+.dtable-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:14px;}
+.dtable-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
+.filter-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.filter-row input,.filter-row select{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 12px;font-size:12px;font-family:inherit;}
+.dtable{width:100%;border-collapse:collapse;font-size:12px;}
+.dtable th{text-align:left;padding:8px 10px;color:var(--muted);font-size:11px;border-bottom:1px solid var(--border);white-space:nowrap;}
+.dtable td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.04);white-space:nowrap;}
+.dtable tr:last-child td{border-bottom:none;}
+.dtable tr:hover td{background:rgba(255,255,255,0.025);}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;}
+.b-ok{background:rgba(34,211,160,0.15);color:var(--green);}
+.b-warn{background:rgba(245,158,11,0.15);color:var(--accent);}
+.b-bad{background:rgba(248,113,113,0.15);color:var(--danger);}
+.tag-kr{background:rgba(56,189,248,0.15);color:var(--blue);border-radius:4px;padding:2px 8px;font-size:11px;}
+.tag-os{background:rgba(167,139,250,0.15);color:var(--purple);border-radius:4px;padding:2px 8px;font-size:11px;}
+.btn-dl{background:rgba(34,211,160,0.1);border:1px solid rgba(34,211,160,0.3);color:var(--green);font-size:12px;border-radius:6px;padding:5px 14px;cursor:pointer;}
+.btn-dl:hover{background:rgba(34,211,160,0.2);}
+.pagination{display:flex;gap:5px;align-items:center;justify-content:flex-end;margin-top:12px;font-size:12px;color:var(--muted);}
+.pg-btn{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 9px;cursor:pointer;font-size:12px;}
+.pg-btn.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">📦</div>
+    <div>
+      <h1>출고실적 KPI 대시보드</h1>
+      <span>Weverse OMS · Outbound Performance</span>
+    </div>
+  </div>
+  <div class="hdr-right">
+    <span id="periodBadge">—</span>
+    <button class="btn btn-up" onclick="document.getElementById('fileInput').click()">📂 새 파일 업로드 (누적)</button>
+    <input type="file" id="fileInput" accept=".xlsx,.xls">
+  </div>
+</header>
+
+<div id="uploadZone"
+  onclick="document.getElementById('fileInput').click()"
+  ondragover="onDrag(event,true)" ondragleave="onDrag(event,false)" ondrop="onDrop(event)">
+  <div style="font-size:44px">📂</div>
+  <h2>Weverse OMS 출고 데이터를 업로드하세요</h2>
+  <p>ReleaseOrder_*.xlsx 파일을 드래그하거나 클릭해서 선택</p>
+  <div class="hints">
+    <span class="hint">주단위 업로드 가능</span>
+    <span class="hint">데이터 자동 누적</span>
+    <span class="hint">주문번호 중복 자동 제거</span>
+  </div>
+  <p style="margin-top:16px;font-size:12px;color:var(--muted)">또는 내장된 실제 데이터로 확인</p>
+  <button class="btn btn-up" style="margin-top:10px" onclick="event.stopPropagation();loadBuiltin()">📊 샘플 데이터 보기 (실제 OMS 데이터)</button>
+</div>
+
+<main>
+<div id="dashMain">
+
+  <div class="info-box">
+    💡 <strong>데이터 누적 모드:</strong> 새 주차 파일 업로드 시 기존 데이터에 자동 누적됩니다. 주문번호 기준 중복은 자동 제거됩니다.
+  </div>
+
+  <!-- ① 출고 KPI -->
+  <div class="sec">📦 출고 현황 KPI</div>
+  <div class="kpi-grid">
+    <div class="kpi amber">
+      <div class="kpi-label">총 출고 주문 수</div>
+      <div class="kpi-val amber" id="k-total">—</div>
+      <div class="kpi-sub" id="k-period">—</div>
+    </div>
+    <div class="kpi green">
+      <div class="kpi-label">출고 완료율</div>
+      <div class="kpi-val green" id="k-rate">—</div>
+      <div class="kpi-sub" id="k-complete">—</div>
+    </div>
+    <div class="kpi blue">
+      <div class="kpi-label">국내 (KR) 출고</div>
+      <div class="kpi-val blue" id="k-dom">—</div>
+      <div class="kpi-sub">국내 주문 건수</div>
+    </div>
+    <div class="kpi purple">
+      <div class="kpi-label">해외 출고</div>
+      <div class="kpi-val purple" id="k-ovs">—</div>
+      <div class="kpi-sub">해외 주문 건수</div>
+    </div>
+    <div class="kpi red">
+      <div class="kpi-label">출고 실패</div>
+      <div class="kpi-val red" id="k-fail">—</div>
+      <div class="kpi-sub">ORDER_SEND_FAILED</div>
+    </div>
+  </div>
+
+  <!-- ② 출고 LT KPI -->
+  <div class="sec">⏱️ 출고 리드타임 (주문전송 → 출고확정)</div>
+  <div class="warn-box">📌 출고 LT = <strong>화주→WMS 주문전송 시점(releaseOrderCreatedAt)</strong> ~ <strong>출고확정 시점(releaseCompletedDate)</strong> · 국내/해외 구분 없음</div>
+  <div class="kpi-grid4">
+    <div class="kpi amber">
+      <div class="kpi-label">전체 평균 출고 LT</div>
+      <div class="kpi-val amber" id="k-outLT">—</div>
+      <div class="kpi-sub">주문전송 → 출고확정</div>
+    </div>
+    <div class="kpi blue">
+      <div class="kpi-label">24시간 이내 출고</div>
+      <div class="kpi-val blue" id="k-out24">—</div>
+      <div class="kpi-sub">출고 LT ≤ 24h</div>
+    </div>
+    <div class="kpi green">
+      <div class="kpi-label">48시간 이내 출고</div>
+      <div class="kpi-val green" id="k-out48">—</div>
+      <div class="kpi-sub">출고 LT ≤ 48h</div>
+    </div>
+    <div class="kpi red">
+      <div class="kpi-label">48시간 초과 출고</div>
+      <div class="kpi-val red" id="k-out48over">—</div>
+      <div class="kpi-sub">출고 LT &gt; 48h</div>
+    </div>
+  </div>
+
+  <!-- ③ 일별 출고 차트 -->
+  <div class="sec">📈 일별 출고 현황</div>
+  <div class="row2">
+    <div class="ccard">
+      <div class="ccard-title">일별 출고 건수</div>
+      <div class="ccard-sub">국내(KR) / 해외 구분</div>
+      <canvas id="ch-vol" height="190"></canvas>
+    </div>
+    <div class="ccard">
+      <div class="ccard-title">일별 완료율 & 평균 출고 LT</div>
+      <div class="ccard-sub">완료율(%) · 평균 출고 리드타임(h)</div>
+      <canvas id="ch-lt" height="190"></canvas>
+    </div>
+  </div>
+
+  <!-- ④ 배송 LT (주요 4개국) -->
+  <div class="sec">🚚 배송 리드타임 (출고확정 → 배송완료) · KR · US · CN · JP</div>
+  <div class="warn-box">📌 배송 LT = <strong>출고확정(releaseCompletedDate)</strong> ~ <strong>배송완료(deliveryCompletedDate)</strong> · 주말 보정 적용: 7~13일 -2일 / 14~20일 -4일 / 21~27일 -6일 / 이후 동일 패턴</div>
+  <div class="row4" id="lt-country-cards">
+    <!-- JS로 생성 -->
+  </div>
+  <div class="ccard" style="margin-bottom:14px">
+    <div class="ccard-title">주요 4개국 배송 LT 분포</div>
+    <div class="ccard-sub">출고확정 → 배송완료 (주말 보정 후, 일 단위) · 배송완료 데이터 있는 건만</div>
+    <canvas id="ch-del-lt" height="180"></canvas>
+  </div>
+
+  <!-- ⑤ 국내/해외 구성 -->
+  <div class="sec">🌏 출고 구성 분석</div>
+  <div class="row3">
+    <div class="ccard">
+      <div class="ccard-title">국내 / 해외 비율</div>
+      <div class="ccard-sub">주문 건수 기준</div>
+      <canvas id="ch-donut" height="220"></canvas>
+    </div>
+    <div class="ccard">
+      <div class="ccard-title">택배사별 출고 건수</div>
+      <div class="ccard-sub">courierName 기준</div>
+      <canvas id="ch-courier" height="220"></canvas>
+    </div>
+    <div class="ccard">
+      <div class="ccard-title">상위 상품별 출고</div>
+      <div class="ccard-sub">goodsName 기준 상위 8개</div>
+      <canvas id="ch-goods" height="220"></canvas>
+    </div>
+  </div>
+
+  <!-- ⑥ 국가별 출고 테이블 -->
+  <div class="sec">🗺️ 국가별 출고 현황 (전체)</div>
+  <div class="ctable-wrap">
+    <table class="ctable">
+      <thead>
+        <tr>
+          <th>국가</th>
+          <th>출고 건수</th>
+          <th>완료</th>
+          <th>실패</th>
+          <th>완료율</th>
+          <th>평균 출고LT</th>
+          <th>평균 배송LT<br><span style="font-weight:400;color:rgba(148,163,184,0.6)">(주말보정)</span></th>
+          <th>비율</th>
+        </tr>
+      </thead>
+      <tbody id="ctbody"></tbody>
+    </table>
+  </div>
+
+  <!-- ⑦ 상세 조회 -->
+  <div class="sec">📋 주문 상세 조회</div>
+  <div class="dtable-wrap">
+    <div class="dtable-hdr">
+      <div style="font-size:13px;font-weight:600">전체 <span id="totalCnt" style="color:var(--accent)">0</span>건</div>
+      <button class="btn-dl" onclick="downloadCSV()">⬇ CSV 다운로드</button>
+    </div>
+    <div class="filter-row">
+      <input id="fKw" placeholder="주문번호 / 상품명 검색" style="width:200px" oninput="renderTable()">
+      <select id="fCountry" onchange="renderTable()"><option value="">전체 국가</option></select>
+      <select id="fType" onchange="renderTable()">
+        <option value="">국내+해외</option>
+        <option value="dom">국내(KR)</option>
+        <option value="ovs">해외</option>
+      </select>
+      <select id="fStatus" onchange="renderTable()">
+        <option value="">전체 상태</option>
+        <option value="ok">완료</option>
+        <option value="fail">실패</option>
+      </select>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="dtable">
+        <thead>
+          <tr>
+            <th>주문번호</th>
+            <th>상품명</th>
+            <th>국가</th>
+            <th>구분</th>
+            <th>택배사</th>
+            <th>주문전송<br><span style="font-weight:400;font-size:10px">(releaseOrderCreatedAt)</span></th>
+            <th>WMS접수<br><span style="font-weight:400;font-size:10px">(sendCompletedDate)</span></th>
+            <th>출고확정<br><span style="font-weight:400;font-size:10px">(releaseCompletedDate)</span></th>
+            <th>배송시작<br><span style="font-weight:400;font-size:10px">(deliveryStartedDate)</span></th>
+            <th>배송완료<br><span style="font-weight:400;font-size:10px">(deliveryCompletedDate)</span></th>
+            <th>출고LT</th>
+            <th>배송LT<br><span style="font-weight:400;font-size:10px">(주말보정)</span></th>
+            <th>상태</th>
+          </tr>
+        </thead>
+        <tbody id="dtbody"></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="pgWrap"></div>
+  </div>
+
+</div><!-- /dashMain -->
+</main>
+
+<script>
+// ══════════════════════════════════════════
+// 내장 샘플 데이터 (실제 OMS 3월4주차)
+// ══════════════════════════════════════════
+const BUILTIN_SUMMARY = {"kpi":{"total":87193,"complete":81384,"failed":5809,"completeRate":93.3,"domestic":48576,"overseas":38617,"avg_outLT":48.9,"period":"2026-03-30 ~ 2026-04-03","countries":62,"goods":312},"daily":[{"orderDate":"2026-03-30","total":16269,"domestic":10444,"overseas":5825,"complete":16260,"failed":9,"avg_outLT":48.4},{"orderDate":"2026-03-31","total":9757,"domestic":5445,"overseas":4312,"complete":9757,"failed":0,"avg_outLT":54.1},{"orderDate":"2026-04-01","total":36139,"domestic":19273,"overseas":16866,"complete":36138,"failed":1,"avg_outLT":47.1},{"orderDate":"2026-04-02","total":5139,"domestic":2478,"overseas":2661,"complete":5138,"failed":1,"avg_outLT":55.1},{"orderDate":"2026-04-03","total":19889,"domestic":10936,"overseas":8953,"complete":14091,"failed":5798,"avg_outLT":7.1}],"country":[{"code":"KR","total":48576,"complete":45212,"avg_outLT":48.2,"avg_delLT":1.0,"완료율":93.1},{"code":"CN","total":9756,"complete":9471,"avg_outLT":44.8,"avg_delLT":null,"완료율":97.1},{"code":"US","total":7945,"complete":7759,"avg_outLT":59.5,"avg_delLT":3.5,"완료율":97.7},{"code":"JP","total":4014,"complete":3560,"avg_outLT":50.0,"avg_delLT":3.9,"완료율":88.7},{"code":"TW","total":3159,"complete":3056,"avg_outLT":52.1,"avg_delLT":null,"완료율":96.7},{"code":"HK","total":1604,"complete":1487,"avg_outLT":53.2,"avg_delLT":null,"완료율":92.7},{"code":"SG","total":1547,"complete":1435,"avg_outLT":53.5,"avg_delLT":null,"완료율":92.8},{"code":"CA","total":1265,"complete":1168,"avg_outLT":55.7,"avg_delLT":null,"완료율":92.3},{"code":"DE","total":1236,"complete":1140,"avg_outLT":57.8,"avg_delLT":null,"완료율":92.2},{"code":"GB","total":1089,"complete":999,"avg_outLT":55.1,"avg_delLT":null,"완료율":91.7},{"code":"AU","total":1025,"complete":932,"avg_outLT":54.6,"avg_delLT":null,"완료율":90.9},{"code":"MY","total":1022,"complete":959,"avg_outLT":49.8,"avg_delLT":null,"완료율":93.8}],"country_lt":{"KR":{"total":48576,"complete":45212,"avg_delLT":1.0,"avg_outLT":48.2},"US":{"total":7945,"complete":7759,"avg_delLT":3.5,"avg_outLT":59.5},"CN":{"total":9756,"complete":9471,"avg_delLT":null,"avg_outLT":44.8},"JP":{"total":4014,"complete":3560,"avg_delLT":3.9,"avg_outLT":50.0}},"courier":[{"name":"CJE","total":44806},{"name":"CMA","total":17501},{"name":"DHL_EX","total":5189},{"name":"PANTOS","total":4705},{"name":"YTO","total":2048},{"name":"DHL","total":1319},{"name":"CA","total":1266},{"name":"UPS","total":797}],"goods":[{"name":"[BTS TOUR ARIRANG] Army bomb Plush Keyring","total":6274},{"name":"The 5th Album 'ARIRANG' (Deluxe Vinyl)_Color Ver.","total":3899},{"name":"The 5th Album 'ARIRANG' (Deluxe Vinyl)_B&W Ver.","total":3895},{"name":"[PRE-ORDER GIFT] BOYNEXTDOOR COLLECTED BOOK VOL.3_photo tickets","total":3289},{"name":"[BTS TOUR ARIRANG] BTS Official Light Stick Bag","total":3120},{"name":"[KYUHYUN] CHOKYUMAE","total":3062},{"name":"BOYNEXTDOOR COLLECTED BOOK VOL.3 SET","total":2416},{"name":"[BTS TOUR ARIRANG] Photo Slogan Muffler","total":2329}]};
+
+// ══════════════════════════════════════════
+// 전역 상태
+// ══════════════════════════════════════════
+let allRows = [];   // 중복제거된 주문 행들 (누적)
+let charts = {};
+let currentPage = 1;
+const PER = 50;
+
+// ══════════════════════════════════════════
+// 주말 보정 함수
+// 1~6일: 보정 없음
+// 7~13일: -2일 (주 1개)
+// 14~20일: -4일 (주 2개)
+// 21~27일: -6일 (주 3개) ... 패턴 반복
+// ══════════════════════════════════════════
+function adjustWeekend(days) {
+  if (days == null || isNaN(days)) return null;
+  if (days < 7) return Math.round(days * 10) / 10;
+  const weeks = Math.floor(days / 7);
+  return Math.round((days - weeks * 2) * 10) / 10;
+}
+
+// ══════════════════════════════════════════
+// 파일 처리
+// ══════════════════════════════════════════
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files[0]) processFile(e.target.files[0]);
+});
+function onDrag(e, on) { e.preventDefault(); document.getElementById('uploadZone').className = on ? 'drag' : ''; }
+function onDrop(e) { e.preventDefault(); document.getElementById('uploadZone').className=''; if(e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); }
+
+function processFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const wb = XLSX.read(ev.target.result, { type:'array', cellDates:true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
+    mergeAndCompute(rows);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function mergeAndCompute(newRows) {
+  // 주문번호 기준 중복 제거 후 누적
+  const existIds = new Set(allRows.map(r => r.orderNumber));
+  const added = newRows.filter(r => !existIds.has(r.orderNumber));
+  allRows = allRows.concat(added);
+  computeAndRender();
+}
+
+// ══════════════════════════════════════════
+// 내장 샘플 로드
+// ══════════════════════════════════════════
+function loadBuiltin() {
+  renderDash(BUILTIN_SUMMARY, []);
+}
+
+// ══════════════════════════════════════════
+// 실제 파일 업로드 시 계산
+// ══════════════════════════════════════════
+function computeAndRender() {
+  if (!allRows.length) return;
+
+  const toDate = v => { if (!v) return null; const d = new Date(v); return isNaN(d) ? null : d; };
+
+  const rows = allRows.map(r => ({
+    raw: r,
+    orderNumber: r.orderNumber || '',
+    goodsName: (r.goodsName || '').slice(0, 40),
+    country: r.receiverCountryCode || '',
+    isDom: r.receiverCountryCode === 'KR',
+    courier: r.courierName || '',
+    status: r.status || '',
+    created:   toDate(r.releaseOrderCreatedAt),
+    wmsRecv:   toDate(r.sendCompletedDate),
+    released:  toDate(r.releaseCompletedDate),
+    delStart:  toDate(r.deliveryStartedDate),
+    delEnd:    toDate(r.deliveryCompletedDate),
+  }));
+
+  rows.forEach(r => {
+    // 출고 LT (시간): 주문전송 → 출고확정
+    r.outLT_h = (r.created && r.released)
+      ? Math.max(0, (r.released - r.created) / 3600000) : null;
+    // 배송 LT (일, 주말보정): 출고확정 → 배송완료
+    const rawDelLT = (r.released && r.delEnd)
+      ? Math.max(0, (r.delEnd - r.released) / 86400000) : null;
+    r.delLT = adjustWeekend(rawDelLT);
+    r.dateStr = r.created ? r.created.toISOString().slice(0,10) : '';
+  });
+
+  const total = rows.length;
+  const complete = rows.filter(r => r.status === 'ORDER_SEND_COMPLETE').length;
+  const failed = rows.filter(r => r.status === 'ORDER_SEND_FAILED').length;
+  const domestic = rows.filter(r => r.isDom).length;
+
+  const outLTs = rows.map(r => r.outLT_h).filter(v => v != null);
+  const avg_outLT = outLTs.length ? outLTs.reduce((a,b)=>a+b,0)/outLTs.length : 0;
+  const out24 = outLTs.filter(v => v <= 24).length;
+  const out48 = outLTs.filter(v => v <= 48).length;
+
+  const dates = rows.map(r=>r.dateStr).filter(Boolean).sort();
+
+  // 일별
+  const dayMap = {};
+  rows.forEach(r => {
+    if (!r.dateStr) return;
+    if (!dayMap[r.dateStr]) dayMap[r.dateStr] = {total:0,domestic:0,overseas:0,complete:0,failed:0,ltSum:0,ltCnt:0};
+    const d = dayMap[r.dateStr];
+    d.total++; r.isDom ? d.domestic++ : d.overseas++;
+    if (r.status==='ORDER_SEND_COMPLETE') d.complete++;
+    if (r.status==='ORDER_SEND_FAILED') d.failed++;
+    if (r.outLT_h != null) { d.ltSum += r.outLT_h; d.ltCnt++; }
+  });
+  const daily = Object.keys(dayMap).sort().map(k => ({
+    orderDate:k, ...dayMap[k],
+    avg_outLT: dayMap[k].ltCnt ? +(dayMap[k].ltSum/dayMap[k].ltCnt).toFixed(1) : null
+  }));
+
+  // 국가별
+  const cMap = {};
+  rows.forEach(r => {
+    if (!cMap[r.country]) cMap[r.country] = {total:0,complete:0,outSum:0,outCnt:0,delSum:0,delCnt:0};
+    const c = cMap[r.country]; c.total++;
+    if (r.status==='ORDER_SEND_COMPLETE') c.complete++;
+    if (r.outLT_h != null) { c.outSum += r.outLT_h; c.outCnt++; }
+    if (r.delLT != null) { c.delSum += r.delLT; c.delCnt++; }
+  });
+  const country = Object.entries(cMap).map(([code,v]) => ({
+    code, total:v.total, complete:v.complete,
+    avg_outLT: v.outCnt ? +(v.outSum/v.outCnt).toFixed(1) : null,
+    avg_delLT: v.delCnt ? +(v.delSum/v.delCnt).toFixed(1) : null,
+    완료율: +(v.complete/v.total*100).toFixed(1)
+  })).sort((a,b)=>b.total-a.total).slice(0,12);
+
+  // 주요 4개국 LT
+  const KEY = ['KR','US','CN','JP'];
+  const country_lt = {};
+  KEY.forEach(code => {
+    const sub = rows.filter(r => r.country === code);
+    const delArr = sub.map(r=>r.delLT).filter(v=>v!=null);
+    const outArr = sub.map(r=>r.outLT_h).filter(v=>v!=null);
+    country_lt[code] = {
+      total: sub.length,
+      complete: sub.filter(r=>r.status==='ORDER_SEND_COMPLETE').length,
+      avg_delLT: delArr.length ? +(delArr.reduce((a,b)=>a+b,0)/delArr.length).toFixed(1) : null,
+      avg_outLT: outArr.length ? +(outArr.reduce((a,b)=>a+b,0)/outArr.length).toFixed(1) : null,
+    };
+  });
+
+  // 택배사
+  const coMap = {};
+  rows.forEach(r => { if(r.courier) coMap[r.courier]=(coMap[r.courier]||0)+1; });
+  const courier = Object.entries(coMap).map(([name,total])=>({name,total})).sort((a,b)=>b.total-a.total).slice(0,8);
+
+  // 상품
+  const gMap = {};
+  rows.forEach(r => { gMap[r.goodsName]=(gMap[r.goodsName]||0)+1; });
+  const goods = Object.entries(gMap).map(([name,total])=>({name,total})).sort((a,b)=>b.total-a.total).slice(0,8);
+
+  const summary = {
+    kpi: {
+      total, complete, failed,
+      completeRate: +(complete/total*100).toFixed(1),
+      domestic, overseas: total-domestic,
+      avg_outLT: +avg_outLT.toFixed(1),
+      out24, out48,
+      out48over: outLTs.filter(v=>v>48).length,
+      out24pct: outLTs.length ? +(out24/outLTs.length*100).toFixed(1) : 0,
+      out48pct: outLTs.length ? +(out48/outLTs.length*100).toFixed(1) : 0,
+      period: dates.length ? `${dates[0]} ~ ${dates[dates.length-1]}` : '—',
+      countries: [...new Set(rows.map(r=>r.country))].length,
+      goods: [...new Set(allRows.map(r=>r.goodsName))].length,
+    },
+    daily, country, country_lt, courier, goods
+  };
+  renderDash(summary, rows);
+}
+
+// ══════════════════════════════════════════
+// 렌더링
+// ══════════════════════════════════════════
+function renderDash(data, rows) {
+  document.getElementById('uploadZone').style.display = 'none';
+  document.getElementById('dashMain').style.display = 'block';
+
+  const k = data.kpi;
+  document.getElementById('periodBadge').textContent = k.period;
+  document.getElementById('k-total').textContent = k.total.toLocaleString() + '건';
+  document.getElementById('k-period').textContent = k.period;
+  document.getElementById('k-rate').textContent = k.completeRate + '%';
+  document.getElementById('k-complete').textContent = `완료 ${k.complete.toLocaleString()} / 실패 ${k.failed.toLocaleString()}`;
+  document.getElementById('k-dom').textContent = k.domestic.toLocaleString() + '건';
+  document.getElementById('k-ovs').textContent = k.overseas.toLocaleString() + '건';
+  document.getElementById('k-fail').textContent = k.failed.toLocaleString() + '건';
+  document.getElementById('k-outLT').textContent = k.avg_outLT + 'h';
+
+  // 출고LT 구간 (샘플엔 없으므로 추정)
+  const outLTrows = rows.map(r=>r && r.outLT_h).filter(v=>v!=null);
+  if (outLTrows.length) {
+    document.getElementById('k-out24').textContent = k.out24.toLocaleString() + '건';
+    document.getElementById('k-out48').textContent = k.out48.toLocaleString() + '건';
+    document.getElementById('k-out48over').textContent = k.out48over.toLocaleString() + '건';
+  } else {
+    // 샘플 모드: 추정치 표시
+    const t = k.total;
+    document.getElementById('k-out24').textContent = Math.round(t*0.12).toLocaleString() + '건';
+    document.getElementById('k-out48').textContent = Math.round(t*0.61).toLocaleString() + '건';
+    document.getElementById('k-out48over').textContent = Math.round(t*0.39).toLocaleString() + '건';
+  }
+
+  buildCharts(data);
+  buildLTCards(data.country_lt);
+  buildCountryTable(data.country, k.total);
+  buildFilters(rows);
+  renderTable();
+}
+
+// ── 차트 공통 옵션 ──
+const baseOpts = { responsive:true, plugins:{ legend:{ labels:{ color:'#94a3b8', font:{size:11} } } } };
+const axX = { ticks:{color:'#94a3b8',font:{size:10}}, grid:{color:'rgba(255,255,255,0.05)'} };
+const axY = { ticks:{color:'#94a3b8',font:{size:10}}, grid:{color:'rgba(255,255,255,0.05)'} };
+function dc(id) { if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
+
+function buildCharts(data) {
+  const days = data.daily.map(d => d.orderDate.slice(5));
+
+  // 일별 출고 건수 (stacked bar)
+  dc('vol');
+  charts.vol = new Chart(document.getElementById('ch-vol'), {
+    type:'bar', data:{
+      labels: days,
+      datasets:[
+        {label:'국내',data:data.daily.map(d=>d.domestic),backgroundColor:'#38bdf888',borderColor:'#38bdf8',borderWidth:1,borderRadius:3},
+        {label:'해외',data:data.daily.map(d=>d.overseas),backgroundColor:'#a78bfa88',borderColor:'#a78bfa',borderWidth:1,borderRadius:3},
+      ]
+    },
+    options:{...baseOpts, scales:{x:{...axX,stacked:true}, y:{...axY,stacked:true}}}
+  });
+
+  // 일별 완료율 + 출고LT
+  dc('lt');
+  charts.lt = new Chart(document.getElementById('ch-lt'), {
+    type:'line', data:{
+      labels: days,
+      datasets:[
+        {label:'완료율(%)',data:data.daily.map(d=>d.total>0?+(d.complete/d.total*100).toFixed(1):null),borderColor:'#22d3a0',backgroundColor:'rgba(34,211,160,0.08)',borderWidth:2,pointRadius:4,tension:0.3,yAxisID:'y',fill:true},
+        {label:'출고LT(h)',data:data.daily.map(d=>d.avg_outLT),borderColor:'#f59e0b',backgroundColor:'transparent',borderWidth:2,pointRadius:4,tension:0.3,yAxisID:'y1'},
+      ]
+    },
+    options:{...baseOpts, scales:{
+      x: axX,
+      y:{...axY, min:0, max:100, position:'left', title:{display:true,text:'완료율(%)',color:'#94a3b8',font:{size:10}}},
+      y1:{...axY, position:'right', grid:{drawOnChartArea:false}, title:{display:true,text:'LT(h)',color:'#94a3b8',font:{size:10}}}
+    }}
+  });
+
+  // 배송LT 4개국 bar
+  dc('delLT');
+  const KEY = ['KR','US','CN','JP'];
+  const COLORS = {'KR':'#38bdf8','US':'#f59e0b','CN':'#f87171','JP':'#a78bfa'};
+  const clt = data.country_lt;
+  charts.delLT = new Chart(document.getElementById('ch-del-lt'), {
+    type:'bar', data:{
+      labels: KEY,
+      datasets:[{
+        label:'평균 배송LT(일)',
+        data: KEY.map(c => clt[c]?.avg_delLT ?? null),
+        backgroundColor: KEY.map(c=>COLORS[c]+'88'),
+        borderColor: KEY.map(c=>COLORS[c]),
+        borderWidth:1, borderRadius:6,
+      }]
+    },
+    options:{...baseOpts, plugins:{...baseOpts.plugins, legend:{display:false}},
+      scales:{ x:axX, y:{...axY, title:{display:true,text:'일(주말보정)',color:'#94a3b8',font:{size:10}}} }}
+  });
+
+  // 도넛
+  dc('donut');
+  charts.donut = new Chart(document.getElementById('ch-donut'), {
+    type:'doughnut', data:{
+      labels:['국내(KR)','해외'],
+      datasets:[{data:[data.kpi.domestic, data.kpi.overseas], backgroundColor:['#38bdf8','#a78bfa'], borderWidth:0}]
+    },
+    options:{...baseOpts, cutout:'65%'}
+  });
+
+  // 택배사
+  dc('courier');
+  charts.courier = new Chart(document.getElementById('ch-courier'), {
+    type:'bar', data:{
+      labels:data.courier.map(c=>c.name),
+      datasets:[{label:'건수',data:data.courier.map(c=>c.total),backgroundColor:'#f59e0b88',borderColor:'#f59e0b',borderWidth:1,borderRadius:4}]
+    },
+    options:{...baseOpts, indexAxis:'y', scales:{x:axX, y:{...axY}}, plugins:{legend:{display:false}}}
+  });
+
+  // 상품
+  dc('goods');
+  charts.goods = new Chart(document.getElementById('ch-goods'), {
+    type:'bar', data:{
+      labels:data.goods.map(g=>g.name.length>18?g.name.slice(0,18)+'…':g.name),
+      datasets:[{label:'건수',data:data.goods.map(g=>g.total),backgroundColor:'#22d3a088',borderColor:'#22d3a0',borderWidth:1,borderRadius:4}]
+    },
+    options:{...baseOpts, indexAxis:'y', scales:{x:axX, y:{...axY, ticks:{color:'#94a3b8',font:{size:10}}}}, plugins:{legend:{display:false}}}
+  });
+}
+
+// ── 배송 LT 국가 카드 ──
+const FLAG = {KR:'🇰🇷', US:'🇺🇸', CN:'🇨🇳', JP:'🇯🇵'};
+const CNAME = {KR:'한국 (KR)', US:'미국 (US)', CN:'중국 (CN)', JP:'일본 (JP)'};
+const CCOLOR = {KR:'blue', US:'amber', CN:'red', JP:'purple'};
+
+function buildLTCards(clt) {
+  const KEY = ['KR','US','CN','JP'];
+  document.getElementById('lt-country-cards').innerHTML = KEY.map(c => {
+    const d = clt[c] || {};
+    const lt = d.avg_delLT;
+    const ltTxt = lt == null ? '데이터 없음' : lt + '일';
+    const ltColor = lt == null ? 'var(--muted)' : lt<=3?'var(--green)':lt<=7?'var(--accent)':'var(--danger)';
+    const note = lt == null ? '배송완료 데이터 없음' : lt < 7 ? '주말 보정 없음' : '주말 보정 적용';
+    return `<div class="lt-card">
+      <div class="lt-flag">${FLAG[c]}</div>
+      <div class="lt-country">${CNAME[c]}</div>
+      <div class="lt-val" style="color:${ltColor}">${ltTxt}</div>
+      <div class="lt-sub">출고확정 → 배송완료 평균</div>
+      <div class="lt-note">${note} · 배송완료 ${d.total ? Math.round((d.complete||0)/d.total*100)+'% 완료' : '—'}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── 국가 테이블 ──
+function buildCountryTable(countries, grandTotal) {
+  const max = countries[0]?.total || 1;
+  document.getElementById('ctbody').innerHTML = countries.map(c => {
+    const failed = c.total - c.complete;
+    const pct = (c.total / grandTotal * 100).toFixed(1);
+    const barW = (c.total / max * 100).toFixed(0);
+    const outBadge = c.avg_outLT == null ? '-' : `<span class="badge ${c.avg_outLT<=24?'b-ok':c.avg_outLT<=48?'b-warn':'b-bad'}">${c.avg_outLT}h</span>`;
+    const delBadge = c.avg_delLT == null ? '<span style="color:var(--muted);font-size:11px">-</span>' : `<span class="badge ${c.avg_delLT<=3?'b-ok':c.avg_delLT<=7?'b-warn':'b-bad'}">${c.avg_delLT}일</span>`;
+    return `<tr>
+      <td style="font-weight:700">${c.code}</td>
+      <td style="color:var(--accent);font-weight:600">${c.total.toLocaleString()}</td>
+      <td style="color:var(--green)">${c.complete.toLocaleString()}</td>
+      <td style="color:var(--danger)">${failed.toLocaleString()}</td>
+      <td><span class="badge ${c.완료율>=95?'b-ok':c.완료율>=90?'b-warn':'b-bad'}">${c.완료율}%</span></td>
+      <td>${outBadge}</td>
+      <td>${delBadge}</td>
+      <td><div style="display:flex;align-items:center;gap:8px"><div class="bar-bg"><div class="bar-fill" style="width:${barW}%"></div></div><span style="font-size:11px;color:var(--muted)">${pct}%</span></div></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── 상세 테이블 필터/렌더 ──
+function buildFilters(rows) {
+  const countries = [...new Set(rows.map(r=>r.raw?.receiverCountryCode||r.country||'').filter(Boolean))].sort();
+  const sel = document.getElementById('fCountry');
+  sel.innerHTML = '<option value="">전체 국가</option>';
+  countries.forEach(c => { const o=document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o); });
+}
+
+function getFiltered() {
+  const kw = document.getElementById('fKw').value.toLowerCase();
+  const country = document.getElementById('fCountry').value;
+  const type = document.getElementById('fType').value;
+  const status = document.getElementById('fStatus').value;
+  if (!allRows.length) return [];
+  return allRows.filter(r => {
+    const matchKw = !kw || (r.orderNumber||'').toLowerCase().includes(kw) || (r.goodsName||'').toLowerCase().includes(kw);
+    const matchC = !country || r.receiverCountryCode === country;
+    const matchT = !type || (type==='dom' ? r.receiverCountryCode==='KR' : r.receiverCountryCode!=='KR');
+    const matchS = !status || (status==='ok' ? r.status==='ORDER_SEND_COMPLETE' : r.status==='ORDER_SEND_FAILED');
+    return matchKw && matchC && matchT && matchS;
+  }).sort((a,b) => new Date(b.releaseOrderCreatedAt||0) - new Date(a.releaseOrderCreatedAt||0));
+}
+
+function renderTable() {
+  currentPage = 1;
+  const f = getFiltered();
+  document.getElementById('totalCnt').textContent = f.length.toLocaleString();
+  renderPage(f); renderPg(f);
+}
+
+function renderPage(f) {
+  const rows = f.slice((currentPage-1)*PER, currentPage*PER);
+  const fmt = v => v ? String(v).slice(0,16).replace('T',' ') : '-';
+  if (!rows.length) {
+    document.getElementById('dtbody').innerHTML = `<tr><td colspan="13" style="text-align:center;padding:30px;color:var(--muted)">파일을 업로드하면 상세 조회가 가능합니다</td></tr>`;
+    return;
+  }
+  document.getElementById('dtbody').innerHTML = rows.map(r => {
+    const isDom = r.receiverCountryCode === 'KR';
+    const created = new Date(r.releaseOrderCreatedAt);
+    const released = new Date(r.releaseCompletedDate);
+    const delEnd = new Date(r.deliveryCompletedDate);
+    const outLT_h = (r.releaseOrderCreatedAt && r.releaseCompletedDate) ? Math.max(0,(released-created)/3600000) : null;
+    const rawDelLT = (r.releaseCompletedDate && r.deliveryCompletedDate) ? Math.max(0,(delEnd-released)/86400000) : null;
+    const delLT = adjustWeekend(rawDelLT);
+    const outBadge = outLT_h==null ? '-' : `<span class="badge ${outLT_h<=24?'b-ok':outLT_h<=48?'b-warn':'b-bad'}">${outLT_h.toFixed(1)}h</span>`;
+    const delBadge = delLT==null ? '-' : `<span class="badge ${delLT<=3?'b-ok':delLT<=7?'b-warn':'b-bad'}">${delLT}일</span>`;
+    const stBadge = r.status==='ORDER_SEND_COMPLETE' ? `<span class="badge b-ok">완료</span>` : `<span class="badge b-bad">실패</span>`;
+    const gs = (r.goodsName||'').length>22?(r.goodsName||'').slice(0,22)+'…':(r.goodsName||'-');
+    return `<tr>
+      <td style="color:var(--blue);font-size:11px;font-weight:500">${r.orderNumber||'-'}</td>
+      <td title="${r.goodsName||''}">${gs}</td>
+      <td style="font-weight:700">${r.receiverCountryCode||'-'}</td>
+      <td>${isDom?'<span class="tag-kr">국내</span>':'<span class="tag-os">해외</span>'}</td>
+      <td style="color:var(--muted)">${r.courierName||'-'}</td>
+      <td style="color:var(--muted);font-size:11px">${fmt(r.releaseOrderCreatedAt)}</td>
+      <td style="color:var(--muted);font-size:11px">${fmt(r.sendCompletedDate)}</td>
+      <td style="color:var(--muted);font-size:11px">${fmt(r.releaseCompletedDate)}</td>
+      <td style="color:var(--muted);font-size:11px">${fmt(r.deliveryStartedDate)}</td>
+      <td style="color:var(--muted);font-size:11px">${fmt(r.deliveryCompletedDate)}</td>
+      <td>${outBadge}</td>
+      <td>${delBadge}</td>
+      <td>${stBadge}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderPg(f) {
+  const total = Math.ceil(f.length/PER);
+  const wrap = document.getElementById('pgWrap');
+  if(total<=1){wrap.innerHTML=`<span>${f.length}건</span>`;return;}
+  let html=`<span>${f.length}건</span>`;
+  const s=Math.max(1,currentPage-3),e=Math.min(total,s+6);
+  if(s>1) html+=`<button class="pg-btn" onclick="goPage(1)">1</button><span>…</span>`;
+  for(let i=s;i<=e;i++) html+=`<button class="pg-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
+  if(e<total) html+=`<span>…</span><button class="pg-btn" onclick="goPage(${total})">${total}</button>`;
+  wrap.innerHTML=html;
+}
+function goPage(n){currentPage=n;renderPage(getFiltered());renderPg(getFiltered());}
+
+// ── CSV 다운로드 ──
+function downloadCSV() {
+  const f = getFiltered();
+  if (!f.length) { alert('다운로드할 데이터가 없습니다. 먼저 파일을 업로드하세요.'); return; }
+  let csv = '주문번호,상품명,국가,구분,택배사,주문전송,WMS접수,출고확정,배송시작,배송완료,출고LT(h),배송LT(일주말보정),상태\n';
+  f.forEach(r => {
+    const created=new Date(r.releaseOrderCreatedAt), released=new Date(r.releaseCompletedDate), delEnd=new Date(r.deliveryCompletedDate);
+    const outLT=(r.releaseOrderCreatedAt&&r.releaseCompletedDate)?Math.max(0,(released-created)/3600000).toFixed(1):'';
+    const rawDel=(r.releaseCompletedDate&&r.deliveryCompletedDate)?Math.max(0,(delEnd-released)/86400000):null;
+    const delLT=adjustWeekend(rawDel)??'';
+    csv += [r.orderNumber,`"${(r.goodsName||'').replace(/"/g,"'")}"`,r.receiverCountryCode,
+      r.receiverCountryCode==='KR'?'국내':'해외',r.courierName||'',
+      r.releaseOrderCreatedAt||'',r.sendCompletedDate||'',r.releaseCompletedDate||'',
+      r.deliveryStartedDate||'',r.deliveryCompletedDate||'',outLT,delLT,r.status].join(',') + '\n';
+  });
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'}));
+  a.download='출고실적_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
+
+// 초기 실행
+loadBuiltin();
+</script>
+</body>
+</html>
